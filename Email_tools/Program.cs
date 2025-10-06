@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
 using Spectre.Console;
@@ -41,6 +42,10 @@ class Program
 {
     static async Task<int> Main()
     {
+        // ===== Quan trọng cho tiếng Việt =====
+        Console.InputEncoding = Encoding.UTF8;  // <<< ép console nhận UTF-8
+        Console.OutputEncoding = Encoding.UTF8;  // <<< ép console in UTF-8
+
         Console.Title = "Bulk Email Tool";
 
         AnsiConsole.Write(
@@ -50,7 +55,7 @@ class Program
         AnsiConsole.MarkupLine("[grey]Console tool • Manage recipients • Broadcast email[/]");
         Console.WriteLine();
 
-        // Load appsettings.json WITHOUT Microsoft.Extensions.Configuration.*
+        // Load appsettings.json (dùng System.Text.Json)
         var settings = LoadSettings("appsettings.json");
         if (string.IsNullOrWhiteSpace(settings.Email.User) ||
             string.IsNullOrWhiteSpace(settings.Email.Password))
@@ -245,6 +250,9 @@ class Program
                 .DefaultValue(bc.DefaultSubject)
                 .AllowEmpty());
 
+        // Nên chắc chắn subject là UTF-8
+        subject ??= string.Empty;
+
         // Body source
         var bodySource = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
@@ -417,13 +425,20 @@ class Program
                 var msg = new MailMessage
                 {
                     From = new MailAddress(settings.User,
-                        string.IsNullOrWhiteSpace(settings.FromName) ? null : settings.FromName),
-                    Subject = subject,
-                    Body = body,
-                    BodyEncoding = Encoding.UTF8,
-                    SubjectEncoding = Encoding.UTF8,
+                        string.IsNullOrWhiteSpace(settings.FromName) ? settings.User : settings.FromName),
+                    Subject = subject ?? string.Empty,
+                    Body = body ?? string.Empty,
+                    BodyEncoding = Encoding.UTF8,       
+                    SubjectEncoding = Encoding.UTF8,    
+                    HeadersEncoding = Encoding.UTF8,    
                     IsBodyHtml = isHtml
                 };
+
+                var media = isHtml ? MediaTypeNames.Text.Html : MediaTypeNames.Text.Plain;
+                var alt = AlternateView.CreateAlternateViewFromString(msg.Body, Encoding.UTF8, media);
+                alt.TransferEncoding = TransferEncoding.QuotedPrintable; 
+                msg.AlternateViews.Add(alt);
+
                 msg.To.Add(to);
 
                 await client.SendMailAsync(msg);
